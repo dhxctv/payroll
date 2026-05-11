@@ -1,37 +1,44 @@
-```react
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>CAN SPORTS - Live Payroll v4</title>
+    <title>CAN SPORTS - Secure Payroll v5</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
+    <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; -webkit-tap-highlight-color: transparent; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            -webkit-tap-highlight-color: transparent;
+            background-color: #0f172a; /* Slate 900 */
+        }
+        .industrial-orange { background-color: #ea580c; }
+        .text-industrial { color: #ea580c; }
+        .border-industrial { border-color: #ea580c; }
+        
         @media print {
             .no-print { display: none !important; }
-            .slip-container { border: 2px solid black !important; padding: 1.5rem !important; width: 100% !important; }
+            .slip-container { border: 2px solid black !important; padding: 2rem !important; width: 100% !important; }
         }
     </style>
 </head>
-<body class="bg-slate-100 text-slate-900">
+<body class="text-slate-900">
     <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // --- FIREBASE CONFIG ---
+        // --- KONFIGURASI FIREBASE ANDA ---
         const firebaseConfig = {
             apiKey: "AIzaSyCw8yl2vbFtShOxuiJUfZPhA2z5xORpJqU",
             authDomain: "payroll-csii.firebaseapp.com",
@@ -42,7 +49,6 @@
             measurementId: "G-JYCEZ58WZS"
         };
 
-        // Initialize Firebase
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
         }
@@ -53,25 +59,24 @@
             const [view, setView] = useState('login');
             const [activeTab, setActiveTab] = useState('dashboard');
             const [loading, setLoading] = useState(true);
+            const [showPass, setShowPass] = useState(false);
+            
+            // App Data States
             const [settings, setSettings] = useState({ companyName: "PT. CAN SPORTS INDUSTRIAL INDONESIA" });
             const [employees, setEmployees] = useState([]);
             const [userRole, setUserRole] = useState(null);
             const [sessionUser, setSessionUser] = useState(null);
             const [unlocked, setUnlocked] = useState(false);
-            const [passInput, setPassInput] = useState('');
 
-            // --- SYNC DATA ---
+            // --- SINKRONISASI LIVE ---
             useEffect(() => {
-                // Anonymous Auth for Demo Security
                 auth.signInAnonymously().catch(err => console.error("Auth error", err));
 
-                // Listen to Settings
                 const unsubSettings = db.collection('settings').doc('config').onSnapshot(doc => {
                     if (doc.exists) setSettings(doc.data());
                     setLoading(false);
                 });
 
-                // Listen to Employees
                 const unsubEmp = db.collection('employees').onSnapshot(snap => {
                     setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 });
@@ -79,167 +84,322 @@
                 return () => { unsubSettings(); unsubEmp(); };
             }, []);
 
+            // --- FUNGSI LOGIN ---
             const handleLogin = (u, p) => {
-                if (u === 'it.admin' && p === 'admin123') {
+                const userLower = u.toLowerCase().trim();
+                
+                // Cek Admin Terlebih Dahulu (Hardcoded untuk Akses Awal)
+                if (userLower === 'it.admin' && p === 'admin123') {
                     setUserRole('IT'); setView('portal'); setActiveTab('it-panel');
-                } else if (u === 'hr.admin' && p === 'hr123') {
+                    return;
+                }
+                if (userLower === 'hr.admin' && p === 'hr123') {
                     setUserRole('HR'); setView('portal'); setActiveTab('hr-panel');
-                } else {
-                    const found = employees.find(e => e.noPegawai === u);
-                    if (found) {
+                    return;
+                }
+
+                // Cek Karyawan
+                const found = employees.find(e => e.noPegawai === u.trim());
+                if (found) {
+                    // Password default karyawan adalah 123456
+                    if (p === '123456' || p === found.birthDate) {
                         setUserRole('EMPLOYEE'); setSessionUser(found); setView('portal'); setActiveTab('emp-portal');
                     } else {
-                        alert("NIK tidak terdaftar.");
+                        alert("Password salah.");
                     }
+                } else {
+                    alert("User ID / NIK tidak terdaftar di sistem.");
                 }
             };
 
-            const updateCompanyName = async (newName) => {
-                await db.collection('settings').doc('config').set({ companyName: newName }, { merge: true });
-                alert("Nama Perusahaan diperbarui di Cloud.");
+            // --- OTOMASI DATABASE (SEEDING) ---
+            const initDatabase = async () => {
+                try {
+                    await db.collection('settings').doc('config').set({
+                        companyName: "PT. CAN SPORTS INDUSTRIAL INDONESIA",
+                        logo: ""
+                    });
+                    // Menambah 1 karyawan contoh agar database tidak kosong
+                    await db.collection('employees').add({
+                        name: "DEVINNA SARASWATI",
+                        noPegawai: "A1101",
+                        birthDate: "19012026", // Format DDMMYYYY sesuai join date di slip
+                        dept: "Assembling",
+                        jabatan: "Operator",
+                        gajiPokok: 2595368
+                    });
+                    alert("Database Berhasil Diinisialisasi!");
+                } catch (err) {
+                    alert("Gagal: Pastikan Firestore Rules sudah diset ke 'allow read, write'.");
+                }
             };
 
-            if (loading) return <div className="h-screen flex items-center justify-center bg-white text-orange-600 font-bold italic">MENGHUBUNGKAN KE SERVER...</div>;
+            if (loading) return (
+                <div className="h-screen flex flex-col items-center justify-center bg-slate-900 text-white gap-4">
+                    <div className="w-12 h-12 border-4 border-orange-600 border-t-transparent rounded-full animate-spin"></div>
+                    <p className="font-bold tracking-widest text-xs animate-pulse">MENGHUBUNGKAN CLOUD...</p>
+                </div>
+            );
 
+            // --- TAMPILAN LOGIN ---
             if (view === 'login') {
                 return (
-                    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
-                        <div className="bg-white w-full max-w-sm rounded-[3rem] shadow-2xl overflow-hidden">
-                            <div className="bg-orange-600 p-12 text-center text-white">
-                                <div className="w-20 h-20 bg-white/20 rounded-3xl mx-auto mb-6 flex items-center justify-center border border-white/30 backdrop-blur-md">
+                    <div className="min-h-screen flex items-center justify-center p-8">
+                        <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+                            <div className="industrial-orange p-12 text-center text-white relative">
+                                <div className="w-20 h-20 bg-white/20 rounded-3xl mx-auto mb-6 flex items-center justify-center border border-white/30 backdrop-blur-lg">
                                     <i data-lucide="shield-check" className="w-10 h-10"></i>
                                 </div>
-                                <h1 className="text-xl font-black tracking-tighter leading-tight uppercase">{settings.companyName}</h1>
+                                <h1 className="text-xl font-extrabold tracking-tighter leading-tight uppercase px-4">{settings.companyName}</h1>
+                                <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-white text-orange-600 px-4 py-1 rounded-full text-[10px] font-black shadow-md border border-orange-100">
+                                    SECURE LOGIN
+                                </div>
                             </div>
-                            <div className="p-10 space-y-5">
-                                <input id="u" className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none focus:border-orange-500 transition-all text-lg" placeholder="User ID / NIK" />
-                                <input id="p" type="password" className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none focus:border-orange-500 transition-all text-lg" placeholder="Password" />
+                            
+                            <div className="p-10 pt-14 space-y-6">
+                                <div className="space-y-4">
+                                    <div className="relative group">
+                                        <i data-lucide="user" className="absolute left-4 top-4 w-5 h-5 text-slate-300 group-focus-within:text-orange-500 transition-colors"></i>
+                                        <input 
+                                            id="u" 
+                                            className="w-full bg-slate-50 border-2 border-slate-100 pl-12 pr-4 py-4 rounded-2xl outline-none focus:border-orange-500 transition-all text-lg font-medium" 
+                                            placeholder="User ID / NIK" 
+                                        />
+                                    </div>
+                                    <div className="relative group">
+                                        <i data-lucide="lock" className="absolute left-4 top-4 w-5 h-5 text-slate-300 group-focus-within:text-orange-500 transition-colors"></i>
+                                        <input 
+                                            id="p" 
+                                            type={showPass ? "text" : "password"} 
+                                            className="w-full bg-slate-50 border-2 border-slate-100 pl-12 pr-14 py-4 rounded-2xl outline-none focus:border-orange-500 transition-all text-lg font-medium" 
+                                            placeholder="Password" 
+                                        />
+                                        <button 
+                                            onClick={() => setShowPass(!showPass)}
+                                            className="absolute right-4 top-4 text-slate-300 hover:text-slate-600"
+                                        >
+                                            <i data-lucide={showPass ? "eye-off" : "eye"} className="w-5 h-5"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                
                                 <button 
                                     onClick={() => handleLogin(document.getElementById('u').value, document.getElementById('p').value)}
-                                    className="w-full bg-orange-600 hover:bg-orange-700 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-orange-100 active:scale-95 transition-transform"
+                                    className="w-full industrial-orange hover:bg-orange-700 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-orange-100 active:scale-95 transition-all flex items-center justify-center gap-3"
                                 >
-                                    LOG IN
+                                    LOG IN <i data-lucide="chevron-right" className="w-5 h-5"></i>
                                 </button>
-                                <p className="text-[10px] text-center text-slate-400 font-bold uppercase tracking-widest">Authorized Access Only</p>
+
+                                {employees.length === 0 && (
+                                    <button 
+                                        onClick={initDatabase}
+                                        className="w-full bg-slate-100 text-slate-400 font-bold py-3 rounded-2xl text-[10px] uppercase tracking-widest border border-dashed border-slate-200"
+                                    >
+                                        Inisialisasi Database (Klik Jika Kosong)
+                                    </button>
+                                )}
+                                
+                                <div className="text-[10px] text-center text-slate-400 font-bold uppercase tracking-widest pt-4">
+                                    Authorized Access Only
+                                </div>
                             </div>
                         </div>
                     </div>
                 );
             }
 
+            // --- TAMPILAN PORTAL ---
             return (
-                <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
-                    {/* Mobile Sidebar/Nav */}
-                    <nav className="w-full md:w-72 bg-slate-900 text-white p-8 flex flex-col no-print shrink-0">
-                        <div className="mb-12 flex items-center gap-4">
-                            <div className="w-12 h-12 bg-orange-600 rounded-2xl flex items-center justify-center font-black">CS</div>
+                <div className="min-h-screen flex flex-col md:flex-row bg-slate-100">
+                    {/* Sidebar Nav */}
+                    <nav className="w-full md:w-80 bg-slate-900 text-white p-8 flex flex-col no-print shrink-0 shadow-2xl relative z-10">
+                        <div className="mb-12 flex items-center gap-4 bg-white/5 p-4 rounded-[2rem] border border-white/5">
+                            <div className="w-12 h-12 industrial-orange rounded-2xl flex items-center justify-center font-black shadow-lg shadow-orange-900/50">CS</div>
                             <div className="overflow-hidden">
-                                <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest">DATABASE LIVE</p>
-                                <p className="font-bold text-xs truncate">{settings.companyName}</p>
+                                <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest">PRO PAYROLL</p>
+                                <p className="font-bold text-xs truncate opacity-80">{settings.companyName}</p>
                             </div>
                         </div>
 
-                        <div className="flex-1 space-y-3">
-                            {userRole === 'IT' && <button onClick={() => setActiveTab('it-panel')} className={`w-full text-left p-4 rounded-2xl font-bold flex items-center gap-3 transition ${activeTab === 'it-panel' ? 'bg-orange-600 shadow-lg' : 'text-slate-500 hover:bg-slate-800'}`}><i data-lucide="settings" className="w-5 h-5"></i> Branding IT</button>}
-                            {(userRole === 'HR' || userRole === 'IT') && <button onClick={() => setActiveTab('hr-panel')} className={`w-full text-left p-4 rounded-2xl font-bold flex items-center gap-3 transition ${activeTab === 'hr-panel' ? 'bg-orange-600 shadow-lg' : 'text-slate-500 hover:bg-slate-800'}`}><i data-lucide="calculator" className="w-5 h-5"></i> Input Payroll</button>}
-                            {userRole === 'EMPLOYEE' && <button onClick={() => setActiveTab('emp-portal')} className={`w-full text-left p-4 rounded-2xl font-bold flex items-center gap-3 transition ${activeTab === 'emp-portal' ? 'bg-orange-600 shadow-lg' : 'text-slate-500 hover:bg-slate-800'}`}><i data-lucide="file-text" className="w-5 h-5"></i> Slip Gaji Saya</button>}
+                        <div className="flex-1 space-y-4">
+                            {userRole === 'IT' && (
+                                <button onClick={() => setActiveTab('it-panel')} className={`w-full text-left p-5 rounded-2xl font-bold flex items-center gap-4 transition-all ${activeTab === 'it-panel' ? 'industrial-orange shadow-lg shadow-orange-900/40 translate-x-2' : 'text-slate-500 hover:bg-white/5'}`}>
+                                    <i data-lucide="settings"></i> Branding IT
+                                </button>
+                            )}
+                            {(userRole === 'HR' || userRole === 'IT') && (
+                                <>
+                                <button onClick={() => setActiveTab('hr-data')} className={`w-full text-left p-5 rounded-2xl font-bold flex items-center gap-4 transition-all ${activeTab === 'hr-data' ? 'industrial-orange shadow-lg shadow-orange-900/40 translate-x-2' : 'text-slate-500 hover:bg-white/5'}`}>
+                                    <i data-lucide="users"></i> Data Karyawan
+                                </button>
+                                <button onClick={() => setActiveTab('hr-payroll')} className={`w-full text-left p-5 rounded-2xl font-bold flex items-center gap-4 transition-all ${activeTab === 'hr-payroll' ? 'industrial-orange shadow-lg shadow-orange-900/40 translate-x-2' : 'text-slate-500 hover:bg-white/5'}`}>
+                                    <i data-lucide="calculator"></i> Proses Gaji
+                                </button>
+                                </>
+                            )}
+                            {userRole === 'EMPLOYEE' && (
+                                <button onClick={() => setActiveTab('emp-portal')} className={`w-full text-left p-5 rounded-2xl font-bold flex items-center gap-4 transition-all ${activeTab === 'emp-portal' ? 'industrial-orange shadow-lg shadow-orange-900/40 translate-x-2' : 'text-slate-500 hover:bg-white/5'}`}>
+                                    <i data-lucide="file-text"></i> Slip Gaji Saya
+                                </button>
+                            )}
                         </div>
 
-                        <button onClick={() => window.location.reload()} className="p-4 text-red-400 font-bold flex items-center gap-3 hover:bg-red-500/10 rounded-2xl mt-10"><i data-lucide="log-out" className="w-5 h-5"></i> Keluar</button>
+                        <button onClick={() => window.location.reload()} className="p-5 text-red-400 font-bold flex items-center gap-4 hover:bg-red-500/10 rounded-2xl mt-10 transition-all active:scale-95">
+                            <i data-lucide="log-out"></i> Keluar Sistem
+                        </button>
                     </nav>
 
-                    <main className="flex-1 p-6 md:p-12 overflow-auto">
+                    {/* Main Content Area */}
+                    <main className="flex-1 p-8 md:p-14 overflow-auto">
+                        
+                        {/* TAB: IT PANEL */}
                         {activeTab === 'it-panel' && (
-                            <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
-                                <h3 className="text-3xl font-black text-slate-800 tracking-tighter">BRANDING IT</h3>
-                                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-6">
-                                    <div className="space-y-2 px-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nama Perusahaan di Cloud</label>
+                            <div className="max-w-3xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-500">
+                                <header>
+                                    <h3 className="text-4xl font-black text-slate-800 tracking-tighter">BRANDING IT</h3>
+                                    <p className="text-slate-500 font-medium mt-2">Atur identitas digital perusahaan di seluruh sistem.</p>
+                                </header>
+                                <div className="bg-white p-12 rounded-[3.5rem] shadow-sm border border-slate-100 space-y-8">
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Nama Perusahaan (Live Sync)</label>
                                         <input 
                                             id="cn" 
                                             defaultValue={settings.companyName} 
-                                            className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-orange-500 text-lg font-bold" 
+                                            className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-orange-500 text-xl font-bold transition-all shadow-inner" 
                                         />
                                     </div>
                                     <button 
-                                        onClick={() => updateCompanyName(document.getElementById('cn').value)}
-                                        className="w-full bg-slate-900 text-white py-5 rounded-3xl font-bold shadow-xl hover:bg-black active:scale-95 transition-all"
+                                        onClick={async () => {
+                                            const name = document.getElementById('cn').value;
+                                            await db.collection('settings').doc('config').update({ companyName: name });
+                                            alert("Nama Perusahaan Berhasil Diperbarui!");
+                                        }}
+                                        className="w-full bg-slate-900 text-white py-6 rounded-[2rem] font-black shadow-2xl hover:bg-black active:scale-95 transition-all flex items-center justify-center gap-3"
                                     >
-                                        SIMPAN KE FIRESTORE
+                                        SIMPAN PERUBAHAN <i data-lucide="save" className="w-5 h-5"></i>
                                     </button>
                                 </div>
                             </div>
                         )}
 
+                        {/* TAB: DATA KARYAWAN (HR) */}
+                        {activeTab === 'hr-data' && (
+                            <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500">
+                                <h3 className="text-3xl font-black text-slate-800 tracking-tighter">DATA KARYAWAN</h3>
+                                <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+                                    <table className="w-full text-left">
+                                        <thead className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                            <tr>
+                                                <th className="px-8 py-6">Nama & NIK</th>
+                                                <th className="px-8 py-6">Bagian</th>
+                                                <th className="px-8 py-6">Gaji Pokok</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            {employees.map(emp => (
+                                                <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="px-8 py-6">
+                                                        <p className="font-bold text-slate-800">{emp.name}</p>
+                                                        <p className="text-[10px] font-black text-orange-600 uppercase">{emp.noPegawai}</p>
+                                                    </td>
+                                                    <td className="px-8 py-6 text-sm font-medium text-slate-500">{emp.dept}</td>
+                                                    <td className="px-8 py-6 font-bold text-slate-700">Rp {new Intl.NumberFormat('id-ID').format(emp.gajiPokok)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* TAB: EMPLOYEE PORTAL */}
                         {activeTab === 'emp-portal' && (
                             <div className="max-w-4xl mx-auto">
                                 {!unlocked ? (
-                                    <div className="bg-white p-12 rounded-[4rem] shadow-xl text-center space-y-8 border border-orange-100 animate-in zoom-in-95">
-                                        <div className="w-20 h-20 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto"><i data-lucide="lock" className="w-10 h-10"></i></div>
-                                        <div className="space-y-2">
-                                            <h3 className="text-2xl font-black text-slate-800 uppercase">Dokumen Terkunci</h3>
-                                            <p className="text-slate-500 font-medium">Verifikasi Tanggal Lahir (DDMMYYYY)</p>
+                                    <div className="bg-white p-14 rounded-[4rem] shadow-2xl text-center space-y-10 border border-orange-100 animate-in zoom-in-95 duration-500">
+                                        <div className="w-24 h-24 bg-orange-100 text-orange-600 rounded-[2.5rem] flex items-center justify-center mx-auto shadow-inner rotate-3 hover:rotate-0 transition-transform"><i data-lucide="lock" className="w-12 h-12"></i></div>
+                                        <div className="space-y-3">
+                                            <h3 className="text-3xl font-black text-slate-800 tracking-tight uppercase">Verifikasi Keamanan</h3>
+                                            <p className="text-slate-500 font-medium px-4">Masukkan Tanggal Lahir (DDMMYYYY) untuk melihat rincian gaji Anda.</p>
                                         </div>
-                                        <div className="max-w-xs mx-auto space-y-4">
+                                        <div className="max-w-xs mx-auto space-y-5">
                                             <input 
                                                 type="password" 
+                                                maxLength={8}
                                                 placeholder="DDMMYYYY" 
-                                                className="w-full text-center text-3xl font-black p-5 bg-slate-50 border-2 rounded-[2rem] outline-none focus:border-orange-600 tracking-[0.4em]" 
+                                                className="w-full text-center text-3xl font-black p-6 bg-slate-50 border-2 rounded-3xl outline-none focus:border-orange-600 tracking-[0.5em] shadow-inner" 
                                                 onChange={e => setPassInput(e.target.value)} 
                                             />
                                             <button 
-                                                onClick={() => passInput === (sessionUser.birthDate || '22061995') ? setUnlocked(true) : alert('Salah!')} 
-                                                className="w-full bg-orange-600 text-white font-black py-5 rounded-[2rem] shadow-lg shadow-orange-100 flex items-center justify-center gap-3"
+                                                onClick={() => passInput === sessionUser.birthDate ? setUnlocked(true) : alert('Verifikasi Gagal.')} 
+                                                className="w-full industrial-orange text-white font-black py-6 rounded-3xl shadow-xl shadow-orange-100 flex items-center justify-center gap-3 active:scale-95 transition-all"
                                             >
-                                                BUKA SLIP <i data-lucide="chevron-right" className="w-5 h-5"></i>
+                                                BUKA DOKUMEN <i data-lucide="unlock" className="w-5 h-5"></i>
                                             </button>
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="space-y-8 pb-20 animate-in fade-in">
-                                        <div className="flex justify-between items-center no-print px-4">
-                                            <button onClick={() => setUnlocked(false)} className="text-slate-400 font-black text-xs uppercase tracking-widest">Tutup</button>
-                                            <button onClick={() => window.print()} className="bg-slate-900 text-white px-8 py-3 rounded-2xl font-black flex items-center gap-3 shadow-xl"><i data-lucide="printer" className="w-5 h-5"></i> CETAK A5</button>
+                                    <div className="space-y-10 pb-20 animate-in fade-in duration-700">
+                                        <div className="flex justify-between items-center no-print px-6">
+                                            <button onClick={() => setUnlocked(false)} className="text-slate-400 font-black text-[10px] uppercase tracking-widest flex items-center gap-2"> <i data-lucide="arrow-left" className="w-3 h-3"></i> Kembali</button>
+                                            <button onClick={() => window.print()} className="bg-slate-900 text-white px-10 py-4 rounded-3xl font-black flex items-center gap-3 shadow-2xl active:scale-95 transition-all"><i data-lucide="printer" className="w-5 h-5"></i> CETAK SLIP A5</button>
                                         </div>
-                                        <div className="bg-white p-10 border-2 border-black font-mono text-[12px] slip-container mx-auto shadow-2xl">
-                                            <div className="flex justify-between border-b-4 border-black pb-4 mb-6">
-                                                <div>
-                                                    <h4 className="font-black text-[16px] uppercase">{settings.companyName}</h4>
-                                                    <p className="font-black underline text-sm">SLIP GAJI - PERIODE MARET 2026</p>
+                                        
+                                        {/* SLIP GAJI DESIGN */}
+                                        <div className="bg-white p-12 border-4 border-black font-mono text-[11px] slip-container mx-auto shadow-2xl relative overflow-hidden">
+                                            <div className="flex justify-between border-b-4 border-black pb-5 mb-8">
+                                                <div className="flex gap-6 items-center">
+                                                    <div className="w-14 h-14 bg-black flex items-center justify-center text-white text-[10px] font-black rounded-lg">CS</div>
+                                                    <div>
+                                                        <h4 className="font-black text-[18px] uppercase tracking-tighter leading-none">{settings.companyName}</h4>
+                                                        <p className="font-black underline text-xs mt-1">SLIP GAJI - PERIODE MARET 2026</p>
+                                                    </div>
                                                 </div>
-                                                <div className="text-right italic border-2 border-black p-2 font-black h-fit">CONFIDENTIAL</div>
+                                                <div className="text-right italic border-2 border-black p-2 font-black h-fit text-[10px]">RAHASIA / CONFIDENTIAL</div>
                                             </div>
-                                            <div className="grid grid-cols-2 mb-8 gap-10">
-                                                <div className="space-y-1">
-                                                    <p>NIK: <span className="font-black">{sessionUser.noPegawai}</span></p>
-                                                    <p>NAMA: <span className="font-black uppercase">{sessionUser.name}</span></p>
-                                                    <p>DEPT: <span className="font-black uppercase">{sessionUser.dept || 'ASSEMBLING'}</span></p>
+                                            
+                                            <div className="grid grid-cols-2 gap-12 mb-10">
+                                                <div className="space-y-1.5">
+                                                    <p className="flex justify-between w-48"><span>NIK</span><span>: {sessionUser.noPegawai}</span></p>
+                                                    <p className="flex justify-between w-48 font-black"><span>NAMA</span><span>: {sessionUser.name}</span></p>
+                                                    <p className="flex justify-between w-48"><span>DEPT</span><span>: {sessionUser.dept}</span></p>
                                                 </div>
-                                                <div className="text-right space-y-1">
-                                                    <p>HK: 21 HARI</p>
-                                                    <p>LEMBUR: 12 JAM</p>
-                                                </div>
-                                            </div>
-                                            <div className="border-y-2 border-black py-8 grid grid-cols-2 gap-16">
-                                                <div className="space-y-2">
-                                                    <p className="font-black underline mb-3 text-xs">I. PENERIMAAN (+)</p>
-                                                    <div className="flex justify-between"><span>Gaji Pokok</span><span>2.595.368</span></div>
-                                                    <div className="flex justify-between font-black border-t border-black pt-2 mt-4 text-sm"><span>TOTAL GROSS</span><span>3.340.442</span></div>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <p className="font-black underline mb-3 text-xs">II. POTONGAN (-)</p>
-                                                    <div className="flex justify-between"><span>BPJS JHT</span><span>51.907</span></div>
-                                                    <div className="flex justify-between font-black border-t border-black pt-2 mt-4 text-sm text-red-600"><span>TOTAL POT</span><span>77.861</span></div>
+                                                <div className="text-right space-y-1.5 font-bold">
+                                                    <p>HK KERJA : 21 HARI</p>
+                                                    <p>WD LEMBUR : 12 JAM</p>
+                                                    <p>HD LEMBUR : 07 JAM</p>
                                                 </div>
                                             </div>
-                                            <div className="mt-10 flex justify-between items-end">
-                                                <div>
-                                                    <p className="text-[11px] font-black text-slate-500 uppercase tracking-tighter">Take Home Pay</p>
-                                                    <p className="text-4xl font-black tracking-tighter">Rp 3.262.581</p>
+
+                                            <div className="border-y-4 border-black py-10 grid grid-cols-2 gap-20">
+                                                <div className="space-y-4">
+                                                    <p className="font-black underline mb-4 text-sm uppercase tracking-widest">Penerimaan (+)</p>
+                                                    <div className="space-y-1.5">
+                                                        <div className="flex justify-between"><span>Gaji Pokok</span><span>2.595.368</span></div>
+                                                        <div className="flex justify-between"><span>Tunjangan</span><span>220.000</span></div>
+                                                        <div className="flex justify-between italic"><span>Total Lembur</span><span>525.074</span></div>
+                                                        <div className="flex justify-between font-black border-t-2 border-black mt-4 pt-2 text-[14px]"><span>TOTAL GROSS</span><span>3.340.442</span></div>
+                                                    </div>
                                                 </div>
-                                                <div className="text-center text-[10px] space-y-10">
-                                                    <p>Majalengka, {new Date().toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'})}</p>
-                                                    <p className="font-black border-t-2 border-black pt-1 px-8 uppercase">{sessionUser.name}</p>
+                                                <div className="space-y-4">
+                                                    <p className="font-black underline mb-4 text-sm uppercase tracking-widest">Potongan (-)</p>
+                                                    <div className="space-y-1.5">
+                                                        <div className="flex justify-between"><span>BPJS JHT</span><span>51.907</span></div>
+                                                        <div className="flex justify-between"><span>BPJS Kesehatan</span><span>25.954</span></div>
+                                                        <div className="flex justify-between"><span>Serikat</span><span>10.000</span></div>
+                                                        <div className="flex justify-between font-black border-t-2 border-black mt-4 pt-2 text-[14px] text-red-600"><span>TOTAL POT</span><span>87.861</span></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-12 flex justify-between items-end">
+                                                <div className="bg-slate-50 p-6 rounded-2xl border-2 border-black">
+                                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-tighter mb-1">Take Home Pay (Gaji Bersih)</p>
+                                                    <p className="text-4xl font-black tracking-tighter">Rp 3.252.581</p>
+                                                </div>
+                                                <div className="text-center text-[10px] space-y-14 pr-10">
+                                                    <p className="uppercase">Majalengka, {new Date().toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'})}</p>
+                                                    <p className="font-black border-t-2 border-black pt-1 px-10 uppercase tracking-widest leading-none">{sessionUser.name}</p>
                                                 </div>
                                             </div>
                                         </div>
@@ -255,10 +415,8 @@
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
         
-        // Refresh icons
-        setTimeout(() => lucide.createIcons(), 500);
+        // Refresh Lucide Icons
+        setInterval(() => lucide.createIcons(), 1000);
     </script>
 </body>
 </html>
-
-```

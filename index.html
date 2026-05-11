@@ -1,0 +1,264 @@
+```react
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CAN SPORTS - Live Payroll v4</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        @media print {
+            .no-print { display: none !important; }
+            .slip-container { border: 2px solid black !important; padding: 1.5rem !important; width: 100% !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- FIREBASE CONFIG ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyCw8yl2vbFtShOxuiJUfZPhA2z5xORpJqU",
+            authDomain: "payroll-csii.firebaseapp.com",
+            projectId: "payroll-csii",
+            storageBucket: "payroll-csii.firebasestorage.app",
+            messagingSenderId: "231474443902",
+            appId: "1:231474443902:web:c81ef44deca081d52bca2f",
+            measurementId: "G-JYCEZ58WZS"
+        };
+
+        // Initialize Firebase
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        function App() {
+            const [view, setView] = useState('login');
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [loading, setLoading] = useState(true);
+            const [settings, setSettings] = useState({ companyName: "PT. CAN SPORTS INDUSTRIAL INDONESIA" });
+            const [employees, setEmployees] = useState([]);
+            const [userRole, setUserRole] = useState(null);
+            const [sessionUser, setSessionUser] = useState(null);
+            const [unlocked, setUnlocked] = useState(false);
+            const [passInput, setPassInput] = useState('');
+
+            // --- SYNC DATA ---
+            useEffect(() => {
+                // Anonymous Auth for Demo Security
+                auth.signInAnonymously().catch(err => console.error("Auth error", err));
+
+                // Listen to Settings
+                const unsubSettings = db.collection('settings').doc('config').onSnapshot(doc => {
+                    if (doc.exists) setSettings(doc.data());
+                    setLoading(false);
+                });
+
+                // Listen to Employees
+                const unsubEmp = db.collection('employees').onSnapshot(snap => {
+                    setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                });
+
+                return () => { unsubSettings(); unsubEmp(); };
+            }, []);
+
+            const handleLogin = (u, p) => {
+                if (u === 'it.admin' && p === 'admin123') {
+                    setUserRole('IT'); setView('portal'); setActiveTab('it-panel');
+                } else if (u === 'hr.admin' && p === 'hr123') {
+                    setUserRole('HR'); setView('portal'); setActiveTab('hr-panel');
+                } else {
+                    const found = employees.find(e => e.noPegawai === u);
+                    if (found) {
+                        setUserRole('EMPLOYEE'); setSessionUser(found); setView('portal'); setActiveTab('emp-portal');
+                    } else {
+                        alert("NIK tidak terdaftar.");
+                    }
+                }
+            };
+
+            const updateCompanyName = async (newName) => {
+                await db.collection('settings').doc('config').set({ companyName: newName }, { merge: true });
+                alert("Nama Perusahaan diperbarui di Cloud.");
+            };
+
+            if (loading) return <div className="h-screen flex items-center justify-center bg-white text-orange-600 font-bold italic">MENGHUBUNGKAN KE SERVER...</div>;
+
+            if (view === 'login') {
+                return (
+                    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
+                        <div className="bg-white w-full max-w-sm rounded-[3rem] shadow-2xl overflow-hidden">
+                            <div className="bg-orange-600 p-12 text-center text-white">
+                                <div className="w-20 h-20 bg-white/20 rounded-3xl mx-auto mb-6 flex items-center justify-center border border-white/30 backdrop-blur-md">
+                                    <i data-lucide="shield-check" className="w-10 h-10"></i>
+                                </div>
+                                <h1 className="text-xl font-black tracking-tighter leading-tight uppercase">{settings.companyName}</h1>
+                            </div>
+                            <div className="p-10 space-y-5">
+                                <input id="u" className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none focus:border-orange-500 transition-all text-lg" placeholder="User ID / NIK" />
+                                <input id="p" type="password" className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none focus:border-orange-500 transition-all text-lg" placeholder="Password" />
+                                <button 
+                                    onClick={() => handleLogin(document.getElementById('u').value, document.getElementById('p').value)}
+                                    className="w-full bg-orange-600 hover:bg-orange-700 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-orange-100 active:scale-95 transition-transform"
+                                >
+                                    LOG IN
+                                </button>
+                                <p className="text-[10px] text-center text-slate-400 font-bold uppercase tracking-widest">Authorized Access Only</p>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
+                    {/* Mobile Sidebar/Nav */}
+                    <nav className="w-full md:w-72 bg-slate-900 text-white p-8 flex flex-col no-print shrink-0">
+                        <div className="mb-12 flex items-center gap-4">
+                            <div className="w-12 h-12 bg-orange-600 rounded-2xl flex items-center justify-center font-black">CS</div>
+                            <div className="overflow-hidden">
+                                <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest">DATABASE LIVE</p>
+                                <p className="font-bold text-xs truncate">{settings.companyName}</p>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 space-y-3">
+                            {userRole === 'IT' && <button onClick={() => setActiveTab('it-panel')} className={`w-full text-left p-4 rounded-2xl font-bold flex items-center gap-3 transition ${activeTab === 'it-panel' ? 'bg-orange-600 shadow-lg' : 'text-slate-500 hover:bg-slate-800'}`}><i data-lucide="settings" className="w-5 h-5"></i> Branding IT</button>}
+                            {(userRole === 'HR' || userRole === 'IT') && <button onClick={() => setActiveTab('hr-panel')} className={`w-full text-left p-4 rounded-2xl font-bold flex items-center gap-3 transition ${activeTab === 'hr-panel' ? 'bg-orange-600 shadow-lg' : 'text-slate-500 hover:bg-slate-800'}`}><i data-lucide="calculator" className="w-5 h-5"></i> Input Payroll</button>}
+                            {userRole === 'EMPLOYEE' && <button onClick={() => setActiveTab('emp-portal')} className={`w-full text-left p-4 rounded-2xl font-bold flex items-center gap-3 transition ${activeTab === 'emp-portal' ? 'bg-orange-600 shadow-lg' : 'text-slate-500 hover:bg-slate-800'}`}><i data-lucide="file-text" className="w-5 h-5"></i> Slip Gaji Saya</button>}
+                        </div>
+
+                        <button onClick={() => window.location.reload()} className="p-4 text-red-400 font-bold flex items-center gap-3 hover:bg-red-500/10 rounded-2xl mt-10"><i data-lucide="log-out" className="w-5 h-5"></i> Keluar</button>
+                    </nav>
+
+                    <main className="flex-1 p-6 md:p-12 overflow-auto">
+                        {activeTab === 'it-panel' && (
+                            <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                                <h3 className="text-3xl font-black text-slate-800 tracking-tighter">BRANDING IT</h3>
+                                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-6">
+                                    <div className="space-y-2 px-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nama Perusahaan di Cloud</label>
+                                        <input 
+                                            id="cn" 
+                                            defaultValue={settings.companyName} 
+                                            className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-orange-500 text-lg font-bold" 
+                                        />
+                                    </div>
+                                    <button 
+                                        onClick={() => updateCompanyName(document.getElementById('cn').value)}
+                                        className="w-full bg-slate-900 text-white py-5 rounded-3xl font-bold shadow-xl hover:bg-black active:scale-95 transition-all"
+                                    >
+                                        SIMPAN KE FIRESTORE
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'emp-portal' && (
+                            <div className="max-w-4xl mx-auto">
+                                {!unlocked ? (
+                                    <div className="bg-white p-12 rounded-[4rem] shadow-xl text-center space-y-8 border border-orange-100 animate-in zoom-in-95">
+                                        <div className="w-20 h-20 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto"><i data-lucide="lock" className="w-10 h-10"></i></div>
+                                        <div className="space-y-2">
+                                            <h3 className="text-2xl font-black text-slate-800 uppercase">Dokumen Terkunci</h3>
+                                            <p className="text-slate-500 font-medium">Verifikasi Tanggal Lahir (DDMMYYYY)</p>
+                                        </div>
+                                        <div className="max-w-xs mx-auto space-y-4">
+                                            <input 
+                                                type="password" 
+                                                placeholder="DDMMYYYY" 
+                                                className="w-full text-center text-3xl font-black p-5 bg-slate-50 border-2 rounded-[2rem] outline-none focus:border-orange-600 tracking-[0.4em]" 
+                                                onChange={e => setPassInput(e.target.value)} 
+                                            />
+                                            <button 
+                                                onClick={() => passInput === (sessionUser.birthDate || '22061995') ? setUnlocked(true) : alert('Salah!')} 
+                                                className="w-full bg-orange-600 text-white font-black py-5 rounded-[2rem] shadow-lg shadow-orange-100 flex items-center justify-center gap-3"
+                                            >
+                                                BUKA SLIP <i data-lucide="chevron-right" className="w-5 h-5"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-8 pb-20 animate-in fade-in">
+                                        <div className="flex justify-between items-center no-print px-4">
+                                            <button onClick={() => setUnlocked(false)} className="text-slate-400 font-black text-xs uppercase tracking-widest">Tutup</button>
+                                            <button onClick={() => window.print()} className="bg-slate-900 text-white px-8 py-3 rounded-2xl font-black flex items-center gap-3 shadow-xl"><i data-lucide="printer" className="w-5 h-5"></i> CETAK A5</button>
+                                        </div>
+                                        <div className="bg-white p-10 border-2 border-black font-mono text-[12px] slip-container mx-auto shadow-2xl">
+                                            <div className="flex justify-between border-b-4 border-black pb-4 mb-6">
+                                                <div>
+                                                    <h4 className="font-black text-[16px] uppercase">{settings.companyName}</h4>
+                                                    <p className="font-black underline text-sm">SLIP GAJI - PERIODE MARET 2026</p>
+                                                </div>
+                                                <div className="text-right italic border-2 border-black p-2 font-black h-fit">CONFIDENTIAL</div>
+                                            </div>
+                                            <div className="grid grid-cols-2 mb-8 gap-10">
+                                                <div className="space-y-1">
+                                                    <p>NIK: <span className="font-black">{sessionUser.noPegawai}</span></p>
+                                                    <p>NAMA: <span className="font-black uppercase">{sessionUser.name}</span></p>
+                                                    <p>DEPT: <span className="font-black uppercase">{sessionUser.dept || 'ASSEMBLING'}</span></p>
+                                                </div>
+                                                <div className="text-right space-y-1">
+                                                    <p>HK: 21 HARI</p>
+                                                    <p>LEMBUR: 12 JAM</p>
+                                                </div>
+                                            </div>
+                                            <div className="border-y-2 border-black py-8 grid grid-cols-2 gap-16">
+                                                <div className="space-y-2">
+                                                    <p className="font-black underline mb-3 text-xs">I. PENERIMAAN (+)</p>
+                                                    <div className="flex justify-between"><span>Gaji Pokok</span><span>2.595.368</span></div>
+                                                    <div className="flex justify-between font-black border-t border-black pt-2 mt-4 text-sm"><span>TOTAL GROSS</span><span>3.340.442</span></div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <p className="font-black underline mb-3 text-xs">II. POTONGAN (-)</p>
+                                                    <div className="flex justify-between"><span>BPJS JHT</span><span>51.907</span></div>
+                                                    <div className="flex justify-between font-black border-t border-black pt-2 mt-4 text-sm text-red-600"><span>TOTAL POT</span><span>77.861</span></div>
+                                                </div>
+                                            </div>
+                                            <div className="mt-10 flex justify-between items-end">
+                                                <div>
+                                                    <p className="text-[11px] font-black text-slate-500 uppercase tracking-tighter">Take Home Pay</p>
+                                                    <p className="text-4xl font-black tracking-tighter">Rp 3.262.581</p>
+                                                </div>
+                                                <div className="text-center text-[10px] space-y-10">
+                                                    <p>Majalengka, {new Date().toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'})}</p>
+                                                    <p className="font-black border-t-2 border-black pt-1 px-8 uppercase">{sessionUser.name}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+        
+        // Refresh icons
+        setTimeout(() => lucide.createIcons(), 500);
+    </script>
+</body>
+</html>
+
+```
